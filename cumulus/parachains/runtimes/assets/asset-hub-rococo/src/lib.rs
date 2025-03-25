@@ -1888,10 +1888,17 @@ impl_runtime_apis! {
 					Ok(TokenLocation::get())
 				}
 				fn worst_case_holding(depositable_count: u32) -> XcmAssets {
+					use pallet_asset_conversion_tx_payment::BenchmarkHelperTrait;
 					// A mix of fungible, non-fungible, and concrete assets.
 					let holding_non_fungibles = MaxAssetsIntoHolding::get() / 2 - depositable_count;
-					let holding_fungibles = holding_non_fungibles.saturating_sub(2);  // -2 for two `iter::once` bellow
-					let fungibles_amount: u128 = 100;
+
+					let holding_fungibles = holding_non_fungibles.saturating_sub(3);  // -3 for two `iter::once` bellow
+					// For fungibles we use a large amount, as we know these can be used for testing traders among other whings
+					// We also create them based of pallet-assets (instance 50) to make sure we can create the appropriate asset
+					// if needed
+					// An example where this is useful is to benchmark buy_execution, whose worst case scenario is using an asset
+					// to pay for execution
+					let fungibles_amount: u128 = 100_000_000_000_000;
 					(0..holding_fungibles)
 						.map(|i| {
 							Asset {
@@ -1901,6 +1908,7 @@ impl_runtime_apis! {
 						})
 						.chain(core::iter::once(Asset { id: Here.into(), fun: Fungible(u128::MAX) }))
 						.chain(core::iter::once(Asset { id: AssetId(TokenLocation::get()), fun: Fungible(1_000_000 * UNITS) }))
+						.chain(core::iter::once(Asset { id: AssetId(AssetConversionTxHelper::create_asset_id_parameter(0).0), fun: Fungible(1_000_000 * UNITS) }))
 						.chain((0..holding_non_fungibles).map(|i| Asset {
 							id: GeneralIndex(i as u128).into(),
 							fun: NonFungible(asset_instance_from(i)),
@@ -1990,9 +1998,27 @@ impl_runtime_apis! {
 				}
 
 				fn worst_case_for_trader() -> Result<(Asset, WeightLimit), BenchmarkError> {
+					use frame_support::traits::tokens::fungible::{Inspect, Mutate};
+					use pallet_asset_conversion_tx_payment::BenchmarkHelperTrait;
+
+					// The worst case happens when we dont use the relay asset
+					// For that we need to create a trade amount
+					// We know worst_case_holding uses generical index 
+					// all we need to do is put one of those assets and create it
+					let (account, _) = pallet_xcm_benchmarks::account_and_location::<Runtime>(1);
+
+					assert_ok!(<Balances as Mutate<_>>::mint_into(
+						&account,
+						<Balances as Inspect<_>>::minimum_balance(),
+					));
+
+					let asset_location = AssetConversionTxHelper::create_asset_id_parameter(0).0;
+
+					AssetConversionTxHelper::setup_balances_and_pool(asset_location.clone(), account);
+
 					Ok((Asset {
-						id: AssetId(TokenLocation::get()),
-						fun: Fungible(1_000_000 * UNITS),
+						id: AssetId(asset_location),
+						fun: Fungible(1_000_000_000_000),
 					}, WeightLimit::Limited(Weight::from_parts(5000, 5000))))
 				}
 

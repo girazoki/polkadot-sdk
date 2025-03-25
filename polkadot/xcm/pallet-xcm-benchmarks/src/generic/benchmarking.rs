@@ -211,12 +211,15 @@ mod benchmarks {
 		// We can already buy execution since we'll load the holding register manually
 		let (asset_for_fees, _): (Asset, WeightLimit) = T::worst_case_for_trader().unwrap();
 
+		let total_weight_bought = Limited(Weight::from_parts(1337, 1337));
+		let total_weight_to_refund = Weight::from_parts(500, 500);
+
 		let previous_xcm = Xcm(vec![BuyExecution {
 			fees: asset_for_fees,
-			weight_limit: Limited(Weight::from_parts(1337, 1337)),
+			weight_limit: total_weight_bought,
 		}]);
 		executor.set_holding(holding_assets.into());
-		executor.set_total_surplus(Weight::from_parts(1337, 1337));
+		executor.set_total_surplus(total_weight_to_refund);
 		executor.set_total_refunded(Weight::zero());
 		executor
 			.bench_process(previous_xcm)
@@ -228,8 +231,8 @@ mod benchmarks {
 		{
 			let _result = executor.bench_process(xcm)?;
 		}
-		assert_eq!(executor.total_surplus(), &Weight::from_parts(1337, 1337));
-		assert_eq!(executor.total_refunded(), &Weight::from_parts(1337, 1337));
+		assert_eq!(executor.total_surplus(), &total_weight_to_refund);
+		assert_eq!(executor.total_refunded(), &total_weight_to_refund);
 
 		Ok(())
 	}
